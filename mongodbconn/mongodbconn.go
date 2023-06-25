@@ -3,29 +3,82 @@ package mongodbconn
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/sivaosorg/govm/dbx"
 	"github.com/sivaosorg/govm/logger"
 	"github.com/sivaosorg/govm/mongodb"
 	"github.com/sivaosorg/govm/utils"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 var (
-	instance *mongo.Client
+	instance *MongoDB
 	_logger  = logger.NewLogger()
 )
 
-func NewClient(config mongodb.MongodbConfig) (*mongo.Client, dbx.Dbx) {
+func NewMongodb() *MongoDB {
+	m := &MongoDB{}
+	return m
+}
+
+func (m *MongoDB) SetConn(conn *mongo.Client) *MongoDB {
+	m.conn = conn
+	return m
+}
+
+func (m *MongoDB) SetDatabase(db *mongo.Database) *MongoDB {
+	m.db = db
+	return m
+}
+
+func (m *MongoDB) SetCollection(collection *mongo.Collection) *MongoDB {
+	m.collection = collection
+	return m
+}
+
+func (m *MongoDB) SetRawCollection(collection string) *MongoDB {
+	m.SetCollection(m.db.Collection(collection))
+	return m
+}
+
+func (m *MongoDB) SetBucket(value *gridfs.Bucket) *MongoDB {
+	m.bucket = value
+	return m
+}
+
+func (m *MongoDB) SetRawBucket(db string) *MongoDB {
+	bucket, err := gridfs.NewBucket(
+		m.conn.Database(m.db.Name()),
+	)
+	if err == nil {
+		m.SetBucket(bucket)
+	}
+	return m
+}
+
+func (m *MongoDB) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := m.conn.Disconnect(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewClient(config mongodb.MongodbConfig) (*MongoDB, dbx.Dbx) {
 	s := dbx.NewDbx().SetDatabase(config.Database)
 	if !config.IsEnabled {
 		s.SetConnected(false).
 			SetMessage("Mongodb unavailable").
 			SetError(fmt.Errorf(s.Message))
-		return &mongo.Client{}, *s
+		return &MongoDB{}, *s
 	}
 	if instance != nil {
 		s.SetConnected(true).SetNewInstance(false)
@@ -35,15 +88,14 @@ func NewClient(config mongodb.MongodbConfig) (*mongo.Client, dbx.Dbx) {
 		config.SetTimeoutSecondsConn(10)
 	}
 	if config.AllowConnSync {
-		// Used to execute client creation procedure only once.
 		var mongoOnce sync.Once
 		mongoOnce.Do(func() {
-			_instance, state := getConn(config, instance, s)
+			_instance, state := getConn(config, s)
 			instance = _instance
 			s = &state
 		})
 	} else {
-		_instance, state := getConn(config, instance, s)
+		_instance, state := getConn(config, s)
 		instance = _instance
 		s = &state
 	}
@@ -68,20 +120,26 @@ func getUrlConn(config mongodb.MongodbConfig) string {
 	return form
 }
 
-func getConn(config mongodb.MongodbConfig, instance *mongo.Client, s *dbx.Dbx) (*mongo.Client, dbx.Dbx) {
+func getConn(config mongodb.MongodbConfig, s *dbx.Dbx) (*MongoDB, dbx.Dbx) {
 	_options := options.Client().ApplyURI(getUrlConn(config))
 	client, err := mongo.Connect(context.Background(), _options)
 	if err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
-		instance = nil
-		return instance, *s
+		return &MongoDB{}, *s
 	}
 	if err := client.Ping(context.Background(), readpref.Primary()); err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
-		instance = nil
-		return instance, *s
+		return &MongoDB{}, *s
 	}
-	s.SetConnected(true).SetNewInstance(true).SetMessage("Connection established")
-	instance = client
+	pid := os.Getpid()
+	s.SetConnected(true).SetNewInstance(true).SetMessage("Connection established").SetPid(pid)
+	db := client.Database(config.Database)
+	instance := NewMongodb().SetConn(client).SetDatabase(db)
+	bucket, err := gridfs.NewBucket(
+		client.Database(config.Database),
+	)
+	if err == nil {
+		instance.SetBucket(bucket)
+	}
 	return instance, *s
 }
