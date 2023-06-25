@@ -339,11 +339,12 @@ func (m *mongodbServiceImpl) ListIndexes(ctx context.Context) ([]bson.M, error) 
 	return indexes, nil
 }
 
+// checking if needed
 func (m *mongodbServiceImpl) BackupDatabase(ctx context.Context, filename string) error {
-	cmd := bson.M{
-		"mongodump": 1,
-		"db":        m.mongodbConn.db.Name(),
-		"out":       filename,
+	cmd := bson.D{
+		{Key: "mongodump", Value: "/usr/bin/mongodump"},
+		{Key: "db", Value: m.mongodbConn.db.Name()},
+		{Key: "out", Value: filename},
 	}
 	result := bson.M{}
 	err := m.mongodbConn.conn.Database("admin").RunCommand(ctx, cmd).Decode(&result)
