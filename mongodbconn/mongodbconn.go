@@ -122,12 +122,14 @@ func getUrlConn(config mongodb.MongodbConfig) string {
 
 func getConn(config mongodb.MongodbConfig, s *dbx.Dbx) (*MongoDB, dbx.Dbx) {
 	_options := options.Client().ApplyURI(getUrlConn(config))
-	client, err := mongo.Connect(context.Background(), _options)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.TimeoutSecondsConn)*time.Second)
+	defer cancel()
+	client, err := mongo.Connect(ctx, _options)
 	if err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
 		return &MongoDB{}, *s
 	}
-	if err := client.Ping(context.Background(), readpref.Primary()); err != nil {
+	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
 		return &MongoDB{}, *s
 	}
