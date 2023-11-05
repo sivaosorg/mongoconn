@@ -3,12 +3,11 @@ module github.com/sivaosorg/mongodbconn
 go 1.20
 
 require (
-	github.com/sivaosorg/govm v1.2.0
+	github.com/sivaosorg/govm v1.2.6
 	go.mongodb.org/mongo-driver v1.12.0
 )
 
 require (
-	github.com/BurntSushi/toml v1.3.2 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -28,6 +27,4 @@ require (
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
