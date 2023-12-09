@@ -18,8 +18,7 @@ import (
 )
 
 var (
-	instance *MongoDB
-	_logger  = logger.NewLogger()
+	_logger = logger.NewLogger()
 )
 
 func NewMongodb() *MongoDB {
@@ -62,6 +61,11 @@ func (m *MongoDB) SetRawBucket(db string) *MongoDB {
 	return m
 }
 
+func (m *MongoDB) SetState(value dbx.Dbx) *MongoDB {
+	m.State = value
+	return m
+}
+
 func (m *MongoDB) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -72,20 +76,38 @@ func (m *MongoDB) Close() error {
 	return nil
 }
 
+func (m *MongoDB) GetConn() *mongo.Client {
+	return m.conn
+}
+
+func (m *MongoDB) GetDb() *mongo.Database {
+	return m.db
+}
+
+func (m *MongoDB) GetCollection() *mongo.Collection {
+	return m.collection
+}
+
+func (m *MongoDB) GetBucket() *gridfs.Bucket {
+	return m.bucket
+}
+
+func (m *MongoDB) Json() string {
+	return utils.ToJson(m)
+}
+
 func NewClient(config mongodb.MongodbConfig) (*MongoDB, dbx.Dbx) {
+	instance := NewMongodb()
 	s := dbx.NewDbx().SetDatabase(config.Database)
 	if !config.IsEnabled {
 		s.SetConnected(false).
 			SetMessage("Mongodb unavailable").
 			SetError(fmt.Errorf(s.Message))
-		return &MongoDB{}, *s
-	}
-	if instance != nil {
-		s.SetConnected(true).SetNewInstance(false)
+		instance.SetState(*s)
 		return instance, *s
 	}
-	if config.TimeoutSecondsConn <= 0 {
-		config.SetTimeoutSecondsConn(10)
+	if config.Timeout <= 0 {
+		config.SetTimeout(10 * time.Second)
 	}
 	if config.AllowConnSync {
 		var mongoOnce sync.Once
@@ -105,6 +127,7 @@ func NewClient(config mongodb.MongodbConfig) (*MongoDB, dbx.Dbx) {
 			_logger.Info(fmt.Sprintf("Connected successfully to mongodb:: %s (database: %s)", getUrlConn(config), config.Database))
 		}
 	}
+	instance.SetState(*s)
 	return instance, *s
 }
 
@@ -121,27 +144,32 @@ func getUrlConn(config mongodb.MongodbConfig) string {
 }
 
 func getConn(config mongodb.MongodbConfig, s *dbx.Dbx) (*MongoDB, dbx.Dbx) {
+	instance := NewMongodb()
 	_options := options.Client().ApplyURI(getUrlConn(config))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.TimeoutSecondsConn)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.Timeout)
 	defer cancel()
 	client, err := mongo.Connect(ctx, _options)
 	if err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
-		return &MongoDB{}, *s
+		instance.SetState(*s)
+		return instance, *s
 	}
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		s.SetConnected(false).SetError(err).SetMessage(err.Error())
-		return &MongoDB{}, *s
+		instance.SetState(*s)
+		return instance, *s
 	}
-	pid := os.Getpid()
-	s.SetConnected(true).SetNewInstance(true).SetMessage("Connection established").SetPid(pid)
+	s.SetConnected(true).SetNewInstance(true).SetMessage("Connected successfully").SetPid(os.Getpid())
 	db := client.Database(config.Database)
-	instance := NewMongodb().SetConn(client).SetDatabase(db)
+	instance.SetConn(client).SetDatabase(db)
 	bucket, err := gridfs.NewBucket(
 		client.Database(config.Database),
 	)
 	if err == nil {
 		instance.SetBucket(bucket)
+	} else {
+		s.SetError(fmt.Errorf("Error bucket: %v", err.Error()))
 	}
+	instance.SetState(*s)
 	return instance, *s
 }
