@@ -1,4 +1,4 @@
-module github.com/sivaosorg/mongodbconn
+module github.com/sivaosorg/mongoconn
 
 go 1.20
 

@@ -1,4 +1,4 @@
-package mongodbconn
+package mongoconn
 
 import (
 	"bytes"

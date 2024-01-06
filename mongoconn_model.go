@@ -1,4 +1,4 @@
-package mongodbconn
+package mongoconn
 
 import (
 	"github.com/sivaosorg/govm/dbx"
