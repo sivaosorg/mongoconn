@@ -3,7 +3,7 @@ module github.com/sivaosorg/mongoconn
 go 1.20
 
 require (
-	github.com/sivaosorg/govm v1.2.8
+	github.com/sivaosorg/govm v1.2.9
 	go.mongodb.org/mongo-driver v1.13.1
 )
 
